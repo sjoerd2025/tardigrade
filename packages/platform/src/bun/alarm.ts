@@ -22,7 +22,7 @@ export function bunAlarm(wake: Effect.Effect<void, Error>, options: { readonly r
       fiber.addObserver(exit => { running.delete(fiber); if (exit._tag === "Failure" && timer === undefined) set(Date.now() + retryIntervalMs) })
     }, Math.max(0, Math.min(MAX_BUN_TIMER_DELAY_MS, at - Date.now())))
   }
-  const alarm: typeof Alarm.Service = { set: at => Effect.sync(() => set(at)), clear: Effect.sync(clear) }
+  const alarm: typeof Alarm.Service = { set: (at: number) => Effect.sync(() => set(at)), clear: Effect.sync(clear) }
   return {
     alarm,
     close: Effect.sync(() => { closed = true; clear() }).pipe(Effect.andThen(Effect.suspend(() => Effect.forEach(running, Fiber.interrupt).pipe(Effect.asVoid)))),

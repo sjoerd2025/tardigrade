@@ -20,10 +20,40 @@ const http = cloudflareHttp({
 export type WorkerHttp<WorkerEnv extends Env = Env> = Required<Pick<ExportedHandler<WorkerEnv>, "fetch">>
 
 const worker: ExportedHandler<Env> = {
-  fetch: (request, env, context) => mountedActor === undefined
-    ? Response.json({ error: "no actor is mounted; call createWorker(actor) in the Worker entry point" }, { status: 503 })
-    : http.fetch!(request, env, context)
+  fetch: async (request, env, context) => {
+    const start = Date.now()
+    const url = new URL(request.url)
+    if (mountedActor === undefined) {
+      console.warn({
+        event: "tardigrade.unmounted",
+        method: request.method,
+        path: url.pathname,
+      })
+      return Response.json({ error: "no actor is mounted; call createWorker(actor) in the Worker entry point" }, { status: 503 })
+    }
+    try {
+      const response = await http.fetch!(request, env, context)
+      console.info({
+        event: "tardigrade.invocation",
+        method: request.method,
+        path: url.pathname,
+        status: response.status,
+        durationMs: Date.now() - start,
+      })
+      return response
+    } catch (error) {
+      console.error({
+        event: "tardigrade.invocation_failed",
+        method: request.method,
+        path: url.pathname,
+        durationMs: Date.now() - start,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      throw error
+    }
+  }
 }
+
 
 // cloudflareWorker mounts a defined actor and its application layers into the Worker host (test/actor.workers.ts, "a mounted actor receives thread application services").
 export const cloudflareWorker = <

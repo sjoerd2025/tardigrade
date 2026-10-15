@@ -15,5 +15,11 @@
   ],
   "r2_buckets": [{ "binding": "OBJECTS", "bucket_name": "tardigrade-test-objects" }],
   "worker_loaders": [{ "binding": "LOADER" }],
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ActorDO", "ThreadDO"] }]
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ActorDO", "ThreadDO"] }],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": { "invocation_logs": false }
+  }
 }
+

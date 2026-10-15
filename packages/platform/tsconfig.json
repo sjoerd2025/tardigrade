@@ -1,5 +1,14 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "types": ["bun", "@cloudflare/workers-types", "@cloudflare/vitest-pool-workers/types"] },
+  "compilerOptions": {
+    "types": ["bun", "@cloudflare/workers-types", "@cloudflare/vitest-pool-workers/types"],
+    "paths": {
+      "@clavia/tardigrade-core": ["../core/src/index.ts"],
+      "@clavia/tardigrade-core/*": ["../core/src/*"],
+      "@clavia/tardigrade-bun": ["../bun/src/index.ts"],
+      "@clavia/tardigrade-code": ["../code/src/index.ts"],
+      "@clavia/tardigrade-cloudflare": ["../cloudflare/src/index.ts"]
+    }
+  },
   "include": ["src", "test", "vitest.config.ts"]
 }

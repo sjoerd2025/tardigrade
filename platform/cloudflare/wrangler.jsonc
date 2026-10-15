@@ -15,7 +15,12 @@
   ],
   "worker_loaders": [{ "binding": "LOADER" }],
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ActorDO", "ThreadDO"] }],
-  "observability": { "enabled": true },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": { "invocation_logs": false }
+  },
+
   "limits": { "cpu_ms": 300000 },
   "vars": {
     "TARDIGRADE_MODEL_CATALOG_URL": "https://models.dev/api.json",

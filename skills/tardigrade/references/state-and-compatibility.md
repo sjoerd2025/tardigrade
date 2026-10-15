@@ -1,66 +1,104 @@
-# State and compatibility
+---
+name: frontend-conventions
+description: Use for creating, modifying, moving, or reviewing React frontend code anywhere in packages/*, including Workshop pages, gatekeeper management apps, shared UI, components, hooks, forms, interactions, styling, accessibility, and frontend tests.
+---
 
-## Logs, checkpoints, and initial state
+# Frontend Conventions
 
-```text
-ordinary replay:      defaults -------------------> fold events
-checkpoint restore:  checkpoint state at position -> fold later events
-initialised thread:  caller-supplied atom state ---> fold new events
-```
+Apply these conventions to the Workshop SPA, gatekeeper management SPAs, and `@gadgets/ui`.
+Package-level `AGENTS.md` files add product-specific rules but do not replace this guidance.
 
-Checkpoint restoration and `StateInitialised` feed the same atom seed mechanism. A checkpoint accelerates restoration within a history. State initialisation starts a new history from supplied state. Keep the initialisation event in durable history so the thread can be rebuilt without a checkpoint.
+## Ownership And Organization
 
-The event log records inputs, accepted work, and outcomes. Atom state is a projection of those records. Replaying records should reproduce state without reissuing completed work. Pending work can resume through execution services. A durable journal alone does not prove exactly-once external side effects: handlers need an appropriate external idempotency or reconciliation strategy for their transport and storage.
+Organize code by product ownership before implementation type. Feature directories own product
+behavior and may contain components, hooks, tests, and utilities that change for the same reason.
 
-## Migrate at a settled boundary
+Start directories flat. Do not introduce `components/`, `hooks/`, `helpers/`, or `tests/`
+subdirectories merely to classify files. Introduce a responsibility-named subsystem directory only
+when several files form a coherent unit or the flat directory becomes difficult to scan.
 
-```text
-source log + old actor logic
-             |
-       replay settled prefix
-             |
-       application converter
-             |
-   { destinationAtomName: encodedState }
-             |
-       destination thread creation
-             |
-       ThreadCreated
-       StateInitialised
-       new events ...
-```
+Use PascalCase filenames for components and camelCase filenames for hooks and non-component
+modules. Colocate `*.test.ts(x)` files with their subject. Feature organization does not replace
+the one-component-per-file model.
 
-Choose a boundary with no pending effects, execution handles, or replies. Pause source writes or otherwise pin that settled prefix. Replay using the source logic, convert its result into destination atom codecs, create the destination, then switch routing after successful creation. Source export, conversion, and cutover belong to the application; Tardigrade does not infer how an arbitrary old log maps to a new graph.
+Keep product behavior with its product even when another feature consumes it. Promote code only as
+high as its ownership requires:
 
-`InitialState` is JSON keyed by destination durable atom names. The supplied value is the codec's encoded shape, which may differ from the in-memory TypeScript state. `atom[AtomState]` exposes its name, decoder, and checkpoint encoder.
+- Code shared within one feature belongs at the nearest common feature directory.
+- Feature-independent code shared across unrelated areas of one app may live in that app's
+  `components/` or `hooks/` directory.
+- Runtime UI shared by independent frontends belongs in `@gadgets/ui`.
+- Do not merge components merely because they look similar. Avoid generic prop-heavy abstractions
+  that erase domain behavior.
 
-```ts
-import { AtomState, type InitialState } from "tardie/core"
+## Components And Hooks
 
-// counter is the destination durable atom; its codec accepts { count: number }.
-const initialState: InitialState = {
-  [counter[AtomState].name]: { count: replayedOldCount },
-}
-```
+Create a separate component when it owns meaningful state, effects, interactions, accessibility
+behavior, or reusable responsibility; represents a distinct UI concern; or obscures its parent's
+main flow. Keep small stateless render helpers private until they develop an independent concern.
 
-Register destination atoms through the host's `initialStateAtoms: [counter]`, then pass `initialState` to root or child allocation. Unknown names, duplicate destination names, and incompatible values fail before allocation is recorded. Omitted atoms use their defaults. Identical named retries reuse the thread; conflicting supplied state fails.
+Extract a hook when it owns a coherent behavior or external synchronization lifecycle, not simply
+to shorten a file. Keep code together when an extracted child would mostly forward markup or depend
+on the parent's refs, setters, and synchronization callbacks.
 
-For a remote destination exposing `methodHttp`, configure those atoms on its host and create through:
+Prefer named arrow-function components and hooks. Type props directly rather than using `React.FC`.
+Give wrappers such as `memo` and `forwardRef` stable DevTools names.
 
-```http
-POST /v1/actors/destination/threads
-Content-Type: application/json
+## Component APIs
 
-{
-  "name": "migrated",
-  "initialState": { "example.counter": { "count": 5 } }
-}
-```
+Represent props that are valid only together as an object or discriminated union. A controlled
+value requires a change callback; otherwise expose an uncontrolled initial value. Do not copy a
+controlled prop into local state with an Effect.
 
-HTTP 400 indicates invalid supplied state. A Cloudflare source still requires the application's source storage access or export path; the destination route does not read the source Durable Object.
+Name callbacks `on<Action>` and pass domain values rather than React setters or browser events.
+Add `children`, slots, variants, `className`, DOM passthrough, and imperative refs only for current
+callers, not speculative reuse.
 
-For custom journal wiring, call `initialiseState({ journal, atoms, initialState, source? })` before opening the runtime. The journal must be empty or contain only `ThreadCreated`; optional `source` is JSON provenance. Host thread creation commits `ThreadCreated` and `StateInitialised` together before opening the runtime or registering the thread.
+Use context for genuinely application-wide values such as authentication, theme, and toasts. Pass
+instance-specific feature data and actions through props.
 
-Migration transfers supplied atom state. Effects, execution handles, and pending replies are excluded. The destination graph may propose work from that state, so review what its first evaluation enables. Checkpointing takes over normally; capture waits until all supplied atoms have been read.
+## Kumo And Styling
 
-See [State initialisation](../../../docs/migration/state-initialisation.mdx) for the complete counter conversion and host code. Preserve durable names and codecs for compatible actor updates; use explicit conversion when their state meaning changes.
+Use Kumo components and semantic tokens by default. Check Kumo and `@gadgets/ui` before creating a
+control or interaction pattern. A shared Gadgets component should compose Kumo behavior, not merely
+rename or restyle a primitive.
+
+Do not add custom color literals, arbitrary Tailwind colors, feature-local token systems, or local
+replacements for Kumo surfaces, borders, text, status, focus, and interaction tokens unless the user
+explicitly requests them. Existing legacy colors are not precedent.
+
+Tailwind is appropriate for structure, spacing, sizing, positioning, responsive behavior, and
+typography. Use custom CSS only for technical behavior Kumo and utilities cannot express. Global
+Kumo token theming is an application-level decision and must not be changed during ordinary feature
+work.
+
+When Kumo is unsuitable, identify the concrete behavioral or accessibility gap before introducing
+a shared abstraction.
+
+## React
+
+Treat Effects as synchronization with external systems, not as derived-state machinery or a way to
+sequence user interactions. Calculate render data during render, keep state near its owner, prefer a
+component `key` for identity resets, and use `useSyncExternalStore` for suitable external stores.
+
+Effects that fetch or subscribe must clean up stale work and remain correct when restarted. Avoid
+chains of Effects and do not synchronize two pieces of React state when one can be derived.
+
+Do not add `useMemo` or `useCallback` without a concrete identity or performance need. Preserve
+keyboard behavior, focus management, accessible names, announcements, and mouse/touch/hybrid input
+parity. RPC stubs must follow the disposal and React state rules in the root `AGENTS.md`.
+
+## Comments
+
+Prefer names and types that communicate intent. Comments should explain non-obvious constraints,
+security or performance reasons, and deliberate departures from conventions. Do not narrate the
+next line. Remove or update comments when their constraint changes.
+
+## Tests
+
+Tests should protect observable behavior, product rules, accessibility, state transitions, races,
+and failure paths. Do not test React, JavaScript, Kumo, or another framework's own behavior merely
+for coverage. Avoid assertions coupled only to implementation details or trivial passthrough.
+
+Behavior-preserving moves should keep tests unchanged apart from imports. Add focused coverage only
+when an extraction exposes important previously untested logic.
